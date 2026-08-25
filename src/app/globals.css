@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Korean copy sets tighter than Latin at the same size; nudge headings back. */
+  h1,
+  h2,
+  h3 {
+    @apply tracking-[-0.02em];
+    word-break: keep-all;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-brand-900;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+
+  .section-eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3.5 py-1.5 text-xs font-semibold text-brand-700;
+  }
+
+  .section-title {
+    @apply text-3xl font-bold leading-[1.28] sm:text-4xl lg:text-[2.75rem];
+  }
+
+  .section-lead {
+    @apply mt-4 text-base leading-relaxed text-ink-muted sm:text-lg;
+  }
+
+  .surface-card {
+    @apply rounded-3xl border border-black/[0.06] bg-white shadow-card;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-brand-gradient bg-clip-text text-transparent;
+  }
+
+  /* Pause looping decoration for anyone who asked the OS to calm things down. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-marquee-left,
+    .animate-marquee-right,
+    .animate-pulse-ring,
+    .animate-fade-up {
+      animation: none !important;
+    }
+  }
+
+  .mask-fade-x {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 8%,
+      black 92%,
+      transparent
+    );
+  }
+}
