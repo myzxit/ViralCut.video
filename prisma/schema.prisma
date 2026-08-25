@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js models
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  projects Project[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Product models
+// ---------------------------------------------------------------------------
+
+enum ProjectMode {
+  SHORTS
+  RECONSTRUCT
+}
+
+enum ProjectStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SourceKind {
+  URL
+  UPLOAD
+}
+
+model Project {
+  id     String @id @default(cuid())
+  userId String
+
+  mode   ProjectMode
+  status ProjectStatus @default(QUEUED)
+
+  title String
+
+  // Where the source video came from.
+  sourceKind SourceKind
+  sourceUrl  String?
+  sourcePath String?
+
+  /// Probed from the source once ingest completes.
+  sourceDurationSec Int?
+
+  /// Reconstruct-only knobs. Null for SHORTS projects.
+  targetMinutes Int?
+  voiceId       String?
+  speechRate    String?
+  captionStyle  String?
+  aspectRatio   String  @default("9:16")
+  language      String  @default("ko")
+
+  /// Coarse progress for the UI: 0-100.
+  progress Int @default(0)
+  /// Which pipeline stage is running, e.g. "transcribe".
+  stage       String?
+  failureCode String?
+  failureHint String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outputs  Output[]
+  events   ProjectEvent[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+enum OutputKind {
+  VIDEO
+  SUBTITLE
+  TRANSCRIPT
+  AUDIO
+}
+
+model Output {
+  id        String @id @default(cuid())
+  projectId String
+
+  kind     OutputKind
+  label    String
+  path     String
+  mimeType String
+  bytes    Int        @default(0)
+
+  /// Rendered duration in seconds, for video and audio outputs.
+  durationSec Int?
+  width       Int?
+  height      Int?
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// Append-only log shown as a timeline on the project page.
+model ProjectEvent {
+  id        String   @id @default(cuid())
+  projectId String
+  stage     String
+  message   String
+  level     String   @default("info")
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
