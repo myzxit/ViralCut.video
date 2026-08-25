@@ -1,13 +1,15 @@
 name: CI
 
 on:
+  # Branch pushes are covered by `pull_request`. Listening to both here would run
+  # every PR commit twice — once for the branch ref, once for the merge ref.
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 concurrency:
-  # A new push supersedes whatever is still running for the same ref.
-  group: ci-${{ github.ref }}
+  # A new push supersedes whatever is still running for the same PR or branch.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
