@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  # A new push supersedes whatever is still running for the same ref.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The smoke test renders real video, and burned-in Korean captions need a
+      # font libass can actually find — without fonts-nanum they come out as boxes.
+      - name: Install media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-nanum
+          fc-cache -f
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # Runs both pipelines end to end with mock providers: synthesizes a source
+      # video, renders it, and asserts the output's duration, resolution, and
+      # audio track. Catches ffmpeg filtergraph regressions that typecheck and
+      # build cannot see.
+      - name: Pipeline smoke test
+        run: npm run smoke
+        env:
+          STORAGE_DIR: ${{ runner.temp }}/viralcut-smoke
