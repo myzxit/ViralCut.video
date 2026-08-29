@@ -3,7 +3,8 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: viralcut
-      POSTGRES_PASSWORD: viralcut
+      # Defaulted for local runs; setup-env.sh writes a random one into .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viralcut}
       POSTGRES_DB: viralcut
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -30,7 +31,7 @@ services:
     build: .
     command: sh -c "npx prisma db push --skip-generate && npm run start"
     environment: &app-env
-      DATABASE_URL: postgresql://viralcut:viralcut@postgres:5432/viralcut
+      DATABASE_URL: postgresql://viralcut:${POSTGRES_PASSWORD:-viralcut}@postgres:5432/viralcut
       REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data
       AUTH_TRUST_HOST: 'true'
@@ -42,7 +43,10 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       FORCE_MOCK_PROVIDERS: ${FORCE_MOCK_PROVIDERS:-}
     ports:
-      - '3000:3000'
+      # Loopback only. On a public host an open 3000 would serve the app over plain
+      # HTTP with session cookies in the clear; docker-compose.prod.yml puts Caddy
+      # in front instead.
+      - '127.0.0.1:3000:3000'
     volumes:
       # Shared with the worker: the web server writes uploads here and the worker
       # reads them, then writes renders back for the download route to stream.

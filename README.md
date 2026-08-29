@@ -44,18 +44,68 @@
 
 ## 실행
 
-### Docker (권장)
+### 로컬 (Docker)
 
 ```bash
-cp .env.example .env
-# AUTH_SECRET 생성
-openssl rand -base64 32
-
-docker compose up --build
+./scripts/setup-env.sh     # AUTH_SECRET·DB 비밀번호 생성해서 .env 작성
+docker compose up -d --build
 ```
 
 `http://localhost:3000` 에서 열립니다. 웹, 워커, Postgres, Redis가 함께 뜨고
 DB 스키마는 기동 시 자동 적용됩니다.
+
+### 실제 도메인에 배포 (HTTPS)
+
+VPS 한 대(2 vCPU / 4GB 이상 권장, 렌더링이 CPU를 쓰므로 여유 있을수록 좋습니다)와
+도메인이 있으면 됩니다.
+
+**1. DNS 먼저.** 도메인의 A 레코드를 서버 IP로 지정하고 전파를 기다립니다.
+Caddy가 80·443 포트로 소유권을 증명하므로, **첫 기동 전에** 두 포트가 외부에서
+열려 있어야 합니다.
+
+**2. 서버에서:**
+
+```bash
+git clone <이 저장소> && cd ViralCut.video
+./scripts/setup-env.sh
+```
+
+**3. `.env` 를 채웁니다:**
+
+| 항목 | 없으면 |
+|---|---|
+| `DOMAIN`, `ACME_EMAIL` | HTTPS 오버레이가 기동하지 않습니다 |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | 로그인 페이지가 "설정되지 않음"을 표시합니다 |
+| `OPENAI_API_KEY` | 목 모드로 동작합니다 (렌더링은 되고 대본·음성만 예시) |
+
+Google 자격증명은 [Google Cloud 콘솔](https://console.cloud.google.com/apis/credentials)에서
+만들고, 승인된 리디렉션 URI에 `https://<도메인>/api/auth/callback/google` 을 넣습니다.
+
+**4. 기동:**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+`https://<도메인>` 으로 열립니다. 인증서는 Caddy가 발급하고 자동 갱신하므로
+certbot이나 갱신 크론은 필요 없습니다.
+
+로그와 상태:
+
+```bash
+docker compose logs -f web worker
+docker compose ps
+```
+
+`docker-compose.yml` 단독으로 띄우면 앱은 `127.0.0.1:3000` 에만 바인딩됩니다.
+공개 서버에서 TLS 없이 노출되지 않도록 한 것이라, 외부 공개는 위 프로덕션
+오버레이(Caddy)를 통해서만 이뤄집니다.
+
+### 서버리스는 안 됩니다
+
+Vercel 같은 곳에는 올릴 수 없습니다. 재구성 작업은 ffmpeg으로 수 분에서 수십 분
+동안 영상을 렌더링하는데, 서버리스 함수의 실행 시간 제한과 임시 파일 시스템으로는
+감당되지 않습니다. 워커가 상주하는 서버가 필요합니다.
 
 ### 로컬 개발
 

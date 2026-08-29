@@ -1,0 +1,43 @@
+# Production overlay: puts Caddy in front so the site is served over HTTPS with a
+# certificate it obtains and renews on its own.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires DOMAIN and ACME_EMAIL in .env, and the domain's A/AAAA record already
+# pointing at this host — Caddy proves ownership over ports 80 and 443, so both
+# must be reachable from the internet before the first start.
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env, e.g. viralcut.video}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env for certificate notices}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  # Compose merges these into the base service's environment; the public URL has to
+  # be the real origin or OAuth callbacks and absolute links point at localhost.
+  web:
+    environment:
+      AUTH_URL: https://${DOMAIN}
+      NEXT_PUBLIC_BASE_URL: https://${DOMAIN}
+      NODE_ENV: production
+
+  worker:
+    environment:
+      AUTH_URL: https://${DOMAIN}
+      NEXT_PUBLIC_BASE_URL: https://${DOMAIN}
+      NODE_ENV: production
+
+volumes:
+  caddy-data:
+  caddy-config:
