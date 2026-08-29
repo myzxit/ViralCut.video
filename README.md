@@ -67,8 +67,17 @@ Caddy가 80·443 포트로 소유권을 증명하므로, **첫 기동 전에** �
 
 ```bash
 git clone <이 저장소> && cd ViralCut.video
+sudo ./scripts/bootstrap-server.sh   # Docker 설치 + 스왑 + 디스크 점검
 ./scripts/setup-env.sh
 ```
+
+`bootstrap-server.sh` 는 우분투/데비안 새 서버용입니다. Docker Engine과 compose
+플러그인을 설치하고, 스왑이 없으면 4GB 스왑파일을 만들고(4GB RAM 서버에서 x264
+인코딩 중 OOM으로 워커가 죽는 것을 막습니다), 디스크 여유를 점검합니다.
+
+**방화벽은 건드리지 않고 명령어만 출력합니다.** SSH를 먼저 허용하지 않고 `ufw
+enable` 을 하면 본인이 잠기기 때문에, 순서를 확인하고 직접 실행하시는 편이
+안전합니다.
 
 **3. `.env` 를 채웁니다:**
 
