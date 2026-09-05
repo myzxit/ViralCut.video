@@ -7,7 +7,7 @@
  */
 
 export const MIN_TARGET_MINUTES = 1;
-export const MAX_TARGET_MINUTES = 25;
+export const MAX_TARGET_MINUTES = 28;
 export const DEFAULT_TARGET_MINUTES = 6;
 
 /**
@@ -16,7 +16,7 @@ export const DEFAULT_TARGET_MINUTES = 6;
  */
 const CHARACTERS_PER_MINUTE = 330;
 
-/** Scenes get longer as the target length grows — a 25-minute video is not 25x the cuts. */
+/** Scenes get longer as the target length grows — a 28-minute video is not 28x the cuts. */
 const SECONDS_PER_SCENE = (minutes: number) => (minutes <= 3 ? 6 : minutes <= 10 ? 9 : 13);
 
 export type SpeechRate = 'slow' | 'normal' | 'fast';
