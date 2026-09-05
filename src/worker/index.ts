@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { resolveProviders } from '@/lib/providers';
 import { createRedisConnection, RENDER_QUEUE, type RenderJobData } from '@/lib/queue';
 import { clearWorkDir, ensureProjectDirs, fileSize, sourceDir } from '@/lib/storage';
+import { startMaintenance } from './maintenance';
 import { runReconstruct } from './pipeline/reconstruct';
 import { runShorts } from './pipeline/shorts';
 import type { PipelineContext } from './pipeline/types';
@@ -170,8 +171,13 @@ console.log(
   }`,
 );
 
+// Reclaims disk from finished projects and clears anything a dead worker left
+// stuck at RUNNING. Runs immediately, then hourly.
+const stopMaintenance = startMaintenance();
+
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal} received, finishing in-flight jobs`);
+  stopMaintenance();
   await worker.close();
   await prisma.$disconnect();
   process.exit(0);

@@ -1,7 +1,7 @@
-import { createReadStream } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '@/lib/config';
+import { prepareTranscriptionChunks } from '@/lib/media/audio';
 import { probe } from '@/lib/media/ffmpeg';
 import type {
   HighlightClip,
@@ -11,6 +11,7 @@ import type {
   SynthesizedSpeech,
   TextToSpeech,
   Transcript,
+  TranscriptSegment,
 } from './types';
 
 /**
@@ -49,15 +50,40 @@ export class OpenAiSpeechToText implements SpeechToText {
     audioPath: string;
     language?: string;
   }): Promise<Transcript> {
-    const form = new FormData();
     const info = await probe(audioPath);
 
-    // Node 22's fetch accepts a web stream; avoids loading a long file into memory.
-    const stream = createReadStream(audioPath);
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(chunk as Buffer);
+    // The pipeline's 48 kHz stereo PCM is ~11.5 MB per minute, so sending it as-is
+    // would exceed the 25 MB upload cap after roughly two minutes. Downmix first,
+    // and split when even the compact form is too big for one request.
+    const chunks = await prepareTranscriptionChunks(
+      audioPath,
+      path.join(path.dirname(audioPath), 'stt'),
+    );
 
-    form.append('file', new Blob([Buffer.concat(chunks)]), path.basename(audioPath));
+    const segments: TranscriptSegment[] = [];
+    for (const chunk of chunks) {
+      const parsed = await this.transcribeOne(chunk.filePath, language);
+      for (const segment of parsed) {
+        // Each chunk's timestamps restart at zero; shift them onto one timeline.
+        segments.push({
+          startSec: segment.start + chunk.offsetSec,
+          endSec: segment.end + chunk.offsetSec,
+          text: segment.text.trim(),
+        });
+      }
+    }
+
+    return {
+      language,
+      durationSec: info.durationSec,
+      segments: segments.filter((segment) => segment.text.length > 0),
+    };
+  }
+
+  private async transcribeOne(filePath: string, language: string) {
+    const form = new FormData();
+    // Chunks are a few MB at most, so reading one into memory is bounded.
+    form.append('file', new Blob([await readFile(filePath)]), path.basename(filePath));
     form.append('model', 'whisper-1');
     form.append('language', language);
     form.append('response_format', 'verbose_json');
@@ -74,19 +100,9 @@ export class OpenAiSpeechToText implements SpeechToText {
     }
 
     const parsed = (await response.json()) as {
-      duration?: number;
       segments?: { start: number; end: number; text: string }[];
     };
-
-    return {
-      language,
-      durationSec: Math.round(parsed.duration ?? info.durationSec),
-      segments: (parsed.segments ?? []).map((segment) => ({
-        startSec: segment.start,
-        endSec: segment.end,
-        text: segment.text.trim(),
-      })),
-    };
+    return parsed.segments ?? [];
   }
 }
 
