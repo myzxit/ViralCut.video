@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: viralcut
+      # Defaulted for local runs; setup-env.sh writes a random one into .env.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viralcut}
+      POSTGRES_DB: viralcut
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U viralcut']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: sh -c "npx prisma db push --skip-generate && npm run start"
+    environment: &app-env
+      DATABASE_URL: postgresql://viralcut:${POSTGRES_PASSWORD:-viralcut}@postgres:5432/viralcut
+      REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data
+      AUTH_TRUST_HOST: 'true'
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      FORCE_MOCK_PROVIDERS: ${FORCE_MOCK_PROVIDERS:-}
+    ports:
+      # Loopback only. On a public host an open 3000 would serve the app over plain
+      # HTTP with session cookies in the clear; docker-compose.prod.yml puts Caddy
+      # in front instead.
+      - '127.0.0.1:3000:3000'
+    volumes:
+      # Shared with the worker: the web server writes uploads here and the worker
+      # reads them, then writes renders back for the download route to stream.
+      - media-data:/data
+    healthcheck:
+      # Reports 503 when Postgres or Redis is unreachable, so a wedged container
+      # is restarted instead of sitting there accepting requests it cannot serve.
+      test:
+        ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: npm run worker:start
+    environment: *app-env
+    volumes:
+      - media-data:/data
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  media-data:
